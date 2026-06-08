@@ -3,15 +3,15 @@ const SETTINGS_KEY = "tea-rd-v3-settings";
 const API_ENABLED = !window.FORCE_LOCAL_MODE && location.protocol !== "file:";
 
 const defaultSettings = {
-  teaPrimaryCategories: ["绿茶", "红茶", "乌龙茶", "黄茶", "白茶", "黑茶", "花茶", "其他代用茶"],
-  additiveCategories: ["香原料", "其他"],
-  generalCategories: ["乳制品", "果汁果酱", "其他"],
-  materialCategories: ["茶叶", "果汁", "乳制品", "糖浆", "小料", "添加剂", "包装物", "其它"],
-  owners: ["原料组", "茶底组", "研发组", "风味组", "试产组", "生产组", "品控组"],
-  statuses: ["研发中", "已定版", "已归档"],
-  materialTags: ["红茶", "乌龙", "绿茶", "白茶", "花香", "高香", "奶茶", "果茶", "待评审"],
-  blendTags: ["奶茶茶底", "果茶茶底", "冷萃茶底", "高香型", "厚度型", "标准版", "待评审"],
-  formulaTags: ["奶茶", "果茶", "冷萃", "厚乳", "季节新品", "标准版", "待评审"],
+  teaPrimaryCategories: ["??", "??", "???", "??", "??", "??", "??", "?????"],
+  additiveCategories: ["???", "??"],
+  generalCategories: ["???", "????", "??"],
+  materialCategories: ["??", "??", "???", "??", "??", "???", "???", "??"],
+  owners: ["???", "???", "???", "???", "???", "???", "???"],
+  statuses: ["???", "???", "???"],
+  materialTags: ["??", "??", "??", "??", "??", "??", "??", "??", "???"],
+  blendTags: ["????", "????", "????", "???", "???", "???", "???"],
+  formulaTags: ["??", "??", "??", "??", "????", "???", "???"],
   units: ["kg", "g", "L", "ml", "%"],
 };
 
@@ -119,21 +119,25 @@ let settings = loadSettings();
 let state = normalizeState(loadState());
 let currentView = "materials";
 let materialSubView = "tea";
+let formulaSubView = "fresh";
 let pageState = {
   materials: 1,
   blends: 1,
   formulas: 1,
+  rtdFormulas: 1,
 };
 const PAGE_SIZE = 24;
 let selected = {
   materials: state.materials[0]?.id || "",
   blends: state.blends[0]?.id || "",
   formulas: state.formulas[0]?.id || "",
+  rtdFormulas: state.rtdFormulas?.[0]?.id || "",
   records: "",
 };
 let editingMaterialId = "";
 let editingBlendId = "";
 let editingFormulaId = "";
+let editingRtdFormulaId = "";
 
 const root = document.querySelector("#view-root");
 const title = document.querySelector("#page-title");
@@ -167,6 +171,17 @@ function bindMaterialTabs() {
       materialSubView = button.dataset.materialView;
       pageState.materials = 1;
       renderMaterials();
+    });
+  });
+}
+
+function bindFormulaTabs() {
+  document.querySelectorAll("[data-formula-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      formulaSubView = button.dataset.formulaView;
+      pageState.formulas = 1;
+      pageState.rtdFormulas = 1;
+      renderFormulas();
     });
   });
 }
@@ -234,18 +249,35 @@ function renderBlends() {
 }
 
 function renderFormulas() {
-  const records = filterRecords(state.formulas);
-  ensureSelected("formulas", records);
+  const isRtd = formulaSubView === "rtd";
+  const collection = isRtd ? "rtdFormulas" : "formulas";
+  const records = filterRecords(state[collection] || []);
+  ensureSelected(collection, records);
   root.innerHTML = `
+    <div class="subnav" aria-label="?????">
+      <button class="subnav-item ${formulaSubView === "fresh" ? "active" : ""}" data-formula-view="fresh" type="button">???????</button>
+      <button class="subnav-item ${formulaSubView === "rtd" ? "active" : ""}" data-formula-view="rtd" type="button">RTD?????</button>
+    </div>
     <div class="layout">
-      ${formulaForm()}
-      ${library("formulas", records, formulaCard, { title: "成品配方资料", hint: `共 ${records.length} 条` })}
+      ${isRtd ? rtdFormulaForm() : formulaForm()}
+      ${library(collection, records, isRtd ? rtdFormulaCard : formulaCard, {
+        title: isRtd ? "RTD??????" : "????????",
+        hint: `? ${records.length} ?`,
+      })}
     </div>
   `;
-  bindFormulaForm();
-  bindCardActions("formulas");
-  bindSelectableCards("formulas");
-  bindPager("formulas");
+  bindFormulaTabs();
+  if (isRtd) {
+    bindRtdFormulaForm();
+    bindCardActions("rtdFormulas");
+    bindSelectableCards("rtdFormulas");
+    bindPager("rtdFormulas");
+  } else {
+    bindFormulaForm();
+    bindCardActions("formulas");
+    bindSelectableCards("formulas");
+    bindPager("formulas");
+  }
 }
 
 function renderRecords() {
@@ -304,20 +336,20 @@ function renderSettings() {
 function materialLibraryConfig() {
   return {
     tea: {
-      title: "茶叶原料库",
-      hint: "用于拼配方案库，也可被成品配方库直接调用",
+      title: "?????",
+      hint: "???????????????? RTD ????",
       form: teaMaterialForm,
       bind: bindTeaMaterialForm,
     },
     additive: {
-      title: "香精/添加剂原料库",
-      hint: "用于后续拼配方案调用",
+      title: "??/??????",
+      hint: "??????? RTD ????",
       form: additiveMaterialForm,
       bind: bindAdditiveMaterialForm,
     },
     general: {
-      title: "果汁奶小料库",
-      hint: "用于后续成品配方调用",
+      title: "???",
+      hint: "??????? RTD ????",
       form: generalMaterialForm,
       bind: bindGeneralMaterialForm,
     },
@@ -390,22 +422,22 @@ function generalMaterialForm() {
     <section class="panel">
       <div class="panel-head">
         <div>
-          <h2>录入果汁奶小料</h2>
-          <p class="hint">用于后续成品配方调用。</p>
+          <h2>????</h2>
+          <p class="hint">????????? RTD ?????</p>
         </div>
       </div>
       <form id="general-material-form" class="form">
         <div class="form-grid">
-          <label><span>名称</span><input name="name" required /></label>
-          <label><span>供应商</span><input name="supplier" /></label>
-          <label><span>一级分类</span><select name="category">${options(settings.generalCategories, "乳制品")}</select></label>
-          <label><span>二级分类</span><input name="secondaryCategory" /></label>
+          <label><span>??</span><input name="name" required /></label>
+          <label><span>???</span><input name="supplier" /></label>
+          <label><span>????</span><select name="category">${options(settings.generalCategories, "???")}</select></label>
+          <label><span>????</span><input name="secondaryCategory" /></label>
         </div>
         <div class="button-row">
           <p id="general-material-message" class="form-message"></p>
           <div class="form-actions">
-            <button class="ghost-button" data-action="cancel-material-edit" type="button" hidden>取消修改</button>
-            <button class="primary-button" data-action="save-material" type="submit">录入果汁奶小料</button>
+            <button class="ghost-button" data-action="cancel-material-edit" type="button" hidden>????</button>
+            <button class="primary-button" data-action="save-material" type="submit">????</button>
           </div>
         </div>
       </form>
@@ -464,24 +496,24 @@ function formulaForm() {
     <section class="panel">
       <div class="panel-head">
         <div>
-          <h2>成品配方录入</h2>
-          <p class="hint">先记录茶叶冲泡，再记录饮品出品；茶汤从冲泡环节调用。</p>
+          <h2>????????</h2>
+          <p class="hint">???????????????????????????</p>
         </div>
       </div>
       <form id="formula-form" class="form">
         <section class="form-section">
-          <h3>基础信息</h3>
+          <h3>????</h3>
           <div class="form-grid">
-            <label><span>名称</span><input name="name" required /></label>
-            <label><span>面向客户</span><input name="customer" /></label>
-            <label><span>状态</span><input name="status" /></label>
-            <label><span>版本</span><input name="version" /></label>
+            <label><span>??</span><input name="name" required /></label>
+            <label><span>????</span><input name="customer" /></label>
+            <label><span>??</span><input name="status" /></label>
+            <label><span>??</span><input name="version" /></label>
           </div>
         </section>
         <section class="form-section">
           <div class="ingredient-head">
-            <h3>茶叶冲泡</h3>
-            <button class="ghost-button small-button" id="add-formula-brew" type="button">新增茶汤</button>
+            <h3>????</h3>
+            <button class="ghost-button small-button" id="add-formula-brew" type="button">????</button>
           </div>
           <div id="formula-brew-rows">
             ${formulaBrewRow(1)}
@@ -490,8 +522,8 @@ function formulaForm() {
         </section>
         <div class="ingredient-editor">
           <div class="ingredient-head">
-            <span>饮品出品</span>
-            <button class="ghost-button small-button" id="add-formula-material" type="button">新增原料</button>
+            <span>????</span>
+            <button class="ghost-button small-button" id="add-formula-material" type="button">????</button>
           </div>
           <div id="formula-material-rows">
             ${formulaMaterialRow(1)}
@@ -501,13 +533,13 @@ function formulaForm() {
         </div>
         <section class="form-section">
           <h3>SOP</h3>
-          <label><span>说明</span><textarea name="sop" rows="4"></textarea></label>
+          <label><span>??</span><textarea name="sop" rows="4"></textarea></label>
         </section>
         <div class="button-row">
           <p id="formula-message" class="form-message"></p>
           <div class="form-actions">
-            <button class="ghost-button" id="cancel-formula-edit" type="button" hidden>取消修改</button>
-            <button class="primary-button" id="save-formula-button" type="submit">录入成品配方</button>
+            <button class="ghost-button" id="cancel-formula-edit" type="button" hidden>????</button>
+            <button class="primary-button" id="save-formula-button" type="submit">????????</button>
           </div>
         </div>
       </form>
@@ -519,17 +551,18 @@ function formulaBrewRow(index) {
   return `
     <div class="formula-brew-row" data-row="${index}">
       <div class="blend-material-top">
-        <span class="row-index">茶汤 ${index}</span>
-        <button class="danger-button row-delete-button" type="button" data-action="remove-formula-brew">删除</button>
+        <span class="row-index">?? ${index}</span>
+        <button class="danger-button row-delete-button" type="button" data-action="remove-formula-brew">??</button>
       </div>
       <div class="formula-brew-grid">
-        <label><span>茶叶名称</span><input name="brewTeaName" list="formula-tea-name-options" /></label>
-        <label><span>茶叶编号</span><input name="brewTeaId" list="formula-tea-id-options" /></label>
-        <label><span>茶叶量</span><input name="brewTeaAmount" /></label>
-        <label><span>冲泡水温</span><input name="brewTemperature" /></label>
-        <label><span>冲泡时间</span><input name="brewTime" /></label>
-        <label><span>热水量</span><input name="brewHotWater" /></label>
-        <label><span>冰块量</span><input name="brewIce" /></label>
+        <label><span>????</span><input name="brewSoupName" /></label>
+        <label><span>????</span><input name="brewTeaName" list="formula-tea-name-options" /></label>
+        <label><span>????</span><input name="brewTeaId" list="formula-tea-id-options" /></label>
+        <label><span>???</span><input name="brewTeaAmount" /></label>
+        <label><span>????</span><input name="brewTemperature" /></label>
+        <label><span>????</span><input name="brewTime" /></label>
+        <label><span>???</span><input name="brewHotWater" /></label>
+        <label><span>???</span><input name="brewIce" /></label>
       </div>
     </div>
   `;
@@ -539,13 +572,13 @@ function formulaMaterialRow(index) {
   return `
     <div class="formula-material-row" data-row="${index}">
       <div class="blend-material-top">
-        <span class="row-index">原料 ${index}</span>
-        <label><span>类型</span><select name="formulaMaterialType">${options(["茶汤", "奶、果汁", "小料"], "茶汤")}</select></label>
-        <button class="danger-button row-delete-button" type="button" data-action="remove-formula-row">删除</button>
+        <span class="row-index">?? ${index}</span>
+        <label><span>??</span><select name="formulaMaterialType">${options(formulaOutputTypes(), "??")}</select></label>
+        <button class="danger-button row-delete-button" type="button" data-action="remove-formula-row">??</button>
       </div>
       <div class="blend-material-main">
-        <label><span>原料名称</span><input name="formulaMaterialName" list="formula-output-tea-name-options" /></label>
-        <label><span>用量</span><input name="formulaMaterialAmount" /></label>
+        <label><span>????</span><input name="formulaMaterialName" list="formula-output-tea-name-options" /></label>
+        <label><span>??</span><input name="formulaMaterialAmount" /></label>
       </div>
     </div>
   `;
@@ -563,17 +596,28 @@ function formulaTeaDatalists() {
   `;
 }
 
+function formulaOutputTypes() {
+  return ["??", ...settings.generalCategories, "??"];
+}
+
+function formulaGeneralDatalistId(category) {
+  return `formula-output-general-${encodeURIComponent(category)}`;
+}
+
 function formulaOutputDatalists() {
-  const milkJuice = generalMaterials().filter((item) => ["乳制品", "果汁果酱"].includes(item.category));
-  const toppings = generalMaterials().filter((item) => item.category === "其他");
+  const grouped = settings.generalCategories
+    .map((category) => ({ category, items: generalMaterials().filter((item) => item.category === category) }))
+    .map(
+      ({ category, items }) => `
+        <datalist id="${formulaGeneralDatalistId(category)}">
+          ${items.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.supplier || item.secondaryCategory || "")}</option>`).join("")}
+        </datalist>
+      `,
+    )
+    .join("");
   return `
     <datalist id="formula-output-tea-name-options"></datalist>
-    <datalist id="formula-output-general-name-options">
-      ${milkJuice.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.supplier || item.secondaryCategory || "")}</option>`).join("")}
-    </datalist>
-    <datalist id="formula-output-topping-name-options">
-      ${toppings.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.supplier || item.secondaryCategory || "")}</option>`).join("")}
-    </datalist>
+    ${grouped}
   `;
 }
 
@@ -581,27 +625,32 @@ function blendMaterialRow(index) {
   return `
     <div class="blend-material-row" data-row="${index}">
       <div class="blend-material-top">
-        <span class="row-index">原料 ${index}</span>
-        <label><span>类型</span><select name="materialType">${options(["茶叶", "添加剂"], "茶叶")}</select></label>
-        <label><span>添加量(%)</span><input name="materialAmount" inputmode="decimal" /></label>
-        <button class="danger-button row-delete-button" type="button" data-action="remove-material-row">删除</button>
+        <span class="row-index">?? ${index}</span>
+        <label><span>??</span><select name="materialType">${options(["??", "???"], "??")}</select></label>
+        <label><span>???(%)</span><input name="materialAmount" inputmode="decimal" /></label>
+        <button class="danger-button row-delete-button" type="button" data-action="remove-material-row">??</button>
       </div>
       <div class="blend-material-main">
-        <label><span>原料名称</span><input name="materialName" list="blend-material-name-options" /></label>
-        <label><span>原料编号</span><input name="materialId" list="blend-material-id-options" /></label>
+        <label><span>????</span><input name="materialName" list="blend-tea-name-options" /></label>
+        <label><span>????</span><input name="materialId" list="blend-tea-id-options" /></label>
       </div>
     </div>
   `;
 }
 
 function materialDatalists() {
-  const callable = [...teaMaterials(), ...additiveMaterials()];
   return `
-    <datalist id="blend-material-name-options">
-      ${callable.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.id)}</option>`).join("")}
+    <datalist id="blend-tea-name-options">
+      ${teaMaterials().map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.id)}</option>`).join("")}
     </datalist>
-    <datalist id="blend-material-id-options">
-      ${callable.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}
+    <datalist id="blend-tea-id-options">
+      ${teaMaterials().map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}
+    </datalist>
+    <datalist id="blend-additive-name-options">
+      ${additiveMaterials().map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.id)}</option>`).join("")}
+    </datalist>
+    <datalist id="blend-additive-id-options">
+      ${additiveMaterials().map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}
     </datalist>
   `;
 }
@@ -861,6 +910,33 @@ function bindBlendForm() {
     }
     button.closest(".blend-material-row").remove();
   });
+
+  document.querySelector("#blend-material-rows").addEventListener("change", (event) => {
+    const select = event.target.closest('[name="materialType"]');
+    if (!select) return;
+    updateBlendMaterialRow(select.closest(".blend-material-row"));
+  });
+
+  updateBlendMaterialRows();
+
+}
+
+function updateBlendMaterialRows() {
+  document.querySelectorAll(".blend-material-row").forEach(updateBlendMaterialRow);
+}
+
+function updateBlendMaterialRow(row) {
+  if (!row) return;
+  const type = clean(row.querySelector('[name="materialType"]').value);
+  const nameInput = row.querySelector('[name="materialName"]');
+  const idInput = row.querySelector('[name="materialId"]');
+  if (type === "???") {
+    nameInput.setAttribute("list", "blend-additive-name-options");
+    idInput.setAttribute("list", "blend-additive-id-options");
+  } else {
+    nameInput.setAttribute("list", "blend-tea-name-options");
+    idInput.setAttribute("list", "blend-tea-id-options");
+  }
 }
 
 function readBlendMaterialRows() {
@@ -884,7 +960,7 @@ function readBlendMaterialRows() {
 }
 
 function findCallableMaterial(type, name, id) {
-  const source = type === "添加剂" ? additiveMaterials() : teaMaterials();
+  const source = type === "???" ? additiveMaterials() : teaMaterials();
   return (
     source.find((item) => id && item.id === id) ||
     source.find((item) => name && item.name === name) ||
@@ -998,7 +1074,7 @@ function bindSelectableCards(collection) {
       selected[collection] = card.dataset.id;
       document.querySelectorAll(`.card[data-collection="${collection}"]`).forEach((item) => item.classList.remove("selected"));
       card.classList.add("selected");
-      const messageId = collection === "materials" ? `${materialSubView}-material-message` : collection === "blends" ? "blend-message" : "formula-message";
+      const messageId = collection === "materials" ? `${materialSubView}-material-message` : collection === "blends" ? "blend-message" : collection === "rtdFormulas" ? "rtd-formula-message" : "formula-message";
       const label = collection === "materials" ? "原料" : collection === "blends" ? "拼配" : "配方";
       showMessage(messageId, `已选中右侧${label}，点击卡片上的“编辑”即可修改。`);
     });
@@ -1073,6 +1149,7 @@ function setBlendMaterialRows(items) {
     row.querySelector('[name="materialAmount"]').value = item.amount || item.ratio || "";
     row.querySelector('[name="materialName"]').value = item.name || "";
     row.querySelector('[name="materialId"]').value = item.materialId || "";
+    updateBlendMaterialRow(row);
   });
 }
 
@@ -1112,6 +1189,7 @@ function setFormulaBrewRows(brews) {
   rows.innerHTML = safeBrews.map((brew, index) => formulaBrewRow(index + 1)).join("");
   rows.querySelectorAll(".formula-brew-row").forEach((row, index) => {
     const brew = safeBrews[index] || {};
+    row.querySelector('[name="brewSoupName"]').value = brew.soupName || "";
     row.querySelector('[name="brewTeaName"]').value = brew.name || "";
     row.querySelector('[name="brewTeaId"]').value = brew.materialId || "";
     row.querySelector('[name="brewTeaAmount"]').value = brew.teaAmount || "";
@@ -1163,6 +1241,7 @@ function readFormulaBrews() {
         sourceType: matched?.sourceType || "",
         materialId: matched?.id || inputId,
         name: matched?.name || inputName,
+        soupName: clean(row.querySelector('[name="brewSoupName"]')?.value),
         teaAmount: clean(row.querySelector('[name="brewTeaAmount"]').value),
         temperature: clean(row.querySelector('[name="brewTemperature"]').value),
         time: clean(row.querySelector('[name="brewTime"]').value),
@@ -1208,8 +1287,8 @@ function findFormulaTeaSource(name, id) {
 }
 
 function findFormulaCallableMaterial(type, name) {
-  if (type === "茶汤") return name ? { name } : null;
-  const source = generalMaterials().filter((item) => formulaGeneralTypeMatches(type, item.category));
+  if (type === "??" || type === "??") return name ? { name } : null;
+  const source = generalMaterials().filter((item) => item.category === type);
   return source.find((item) => name && item.name === name) || source.find((item) => name && item.name.includes(name));
 }
 
@@ -1221,22 +1300,23 @@ function updateFormulaMaterialRow(row) {
   if (!row) return;
   const type = clean(row.querySelector('[name="formulaMaterialType"]').value);
   const nameInput = row.querySelector('[name="formulaMaterialName"]');
-  if (type === "茶汤") {
+  if (type === "??") {
     nameInput.setAttribute("list", "formula-output-tea-name-options");
-  } else if (type === "奶、果汁") {
-    nameInput.setAttribute("list", "formula-output-general-name-options");
-    if (currentFormulaTeaSoupNames().includes(nameInput.value) || nameInput.value === "茶汤") nameInput.value = "";
+  } else if (type === "??") {
+    nameInput.removeAttribute("list");
+    if (!nameInput.value) nameInput.value = "??";
   } else {
-    nameInput.setAttribute("list", "formula-output-topping-name-options");
-    if (currentFormulaTeaSoupNames().includes(nameInput.value) || nameInput.value === "茶汤") nameInput.value = "";
+    nameInput.setAttribute("list", formulaGeneralDatalistId(type));
+    if (currentFormulaTeaSoupNames().includes(nameInput.value) || nameInput.value === "??" || nameInput.value === "??") nameInput.value = "";
   }
 }
 
 function currentFormulaTeaSoupNames() {
   return [...document.querySelectorAll(".formula-brew-row")]
     .map((row, index) => {
-      const name = clean(row.querySelector('[name="brewTeaName"]').value);
-      return name || `茶汤 ${index + 1}`;
+      const soupName = clean(row.querySelector('[name="brewSoupName"]')?.value);
+      const teaName = clean(row.querySelector('[name="brewTeaName"]').value);
+      return soupName || (teaName ? `${teaName}??` : `?? ${index + 1}`);
     })
     .filter(Boolean);
 }
@@ -1264,9 +1344,7 @@ function reindexRows(containerSelector, rowSelector, label) {
 }
 
 function formulaGeneralTypeMatches(type, category) {
-  if (type === "奶、果汁") return category === "果汁果酱" || category === "乳制品";
-  if (type === "小料") return category === "其他";
-  return false;
+  return type === category;
 }
 
 function legacyFormulaBrew(record) {
@@ -1286,6 +1364,332 @@ function legacyFormulaItems(record) {
   ].filter(Boolean);
 }
 
+function rtdFormulaForm() {
+  return `
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>RTD??????</h2>
+          <p class="hint">????????????????????????????</p>
+        </div>
+      </div>
+      <form id="rtd-formula-form" class="form">
+        <section class="form-section">
+          <h3>????</h3>
+          <div class="form-grid">
+            <label><span>??</span><input name="name" required /></label>
+            <label><span>????</span><input name="customer" /></label>
+            <label><span>??</span><input name="status" /></label>
+            <label><span>??</span><input name="version" /></label>
+          </div>
+        </section>
+        <section class="form-section">
+          <div class="ingredient-head">
+            <h3>????</h3>
+            <button class="ghost-button small-button" id="add-rtd-tea" type="button">????</button>
+          </div>
+          <div id="rtd-tea-rows">
+            ${rtdTeaRow(1)}
+          </div>
+          <div class="form-grid extraction-grid">
+            <label><span>????</span><input name="extractTemperature" /></label>
+            <label><span>????</span><input name="extractTime" /></label>
+            <label><span>?????</span><input name="brewTeaWaterRatio" /></label>
+            <label><span>?????</span><input name="finalTeaWaterRatio" /></label>
+          </div>
+          ${rtdTeaDatalists()}
+        </section>
+        <section class="form-section">
+          <div class="ingredient-head">
+            <h3>????</h3>
+            <button class="ghost-button small-button" id="add-rtd-mix" type="button">????</button>
+          </div>
+          <div class="rtd-mix-table">
+            <div class="rtd-mix-head"><span>????</span><span>???</span><span>???????</span><span></span></div>
+            <div id="rtd-mix-rows">
+              ${rtdMixRow(1)}
+              ${rtdMixRow(2)}
+            </div>
+          </div>
+          ${rtdMixDatalists()}
+        </section>
+        <div class="button-row">
+          <p id="rtd-formula-message" class="form-message"></p>
+          <div class="form-actions">
+            <button class="ghost-button" id="cancel-rtd-formula-edit" type="button" hidden>????</button>
+            <button class="primary-button" id="save-rtd-formula-button" type="submit">??RTD????</button>
+          </div>
+        </div>
+      </form>
+    </section>
+  `;
+}
+
+function rtdTeaRow(index) {
+  return `
+    <div class="formula-material-row rtd-tea-row" data-row="${index}">
+      <div class="blend-material-top">
+        <span class="row-index">?? ${index}</span>
+        <button class="danger-button row-delete-button" type="button" data-action="remove-rtd-tea">??</button>
+      </div>
+      <div class="blend-material-main">
+        <label><span>???</span><input name="rtdTeaName" list="rtd-tea-name-options" /></label>
+        <label><span>????</span><input name="rtdTeaId" list="rtd-tea-id-options" /></label>
+      </div>
+    </div>
+  `;
+}
+
+function rtdMixRow(index) {
+  return `
+    <div class="rtd-mix-row" data-row="${index}">
+      <label><span>????</span><select name="rtdMixType">${options(["??", "???", "??"], "??")}</select></label>
+      <label><span>???</span><input name="rtdMixName" list="rtd-mix-tea-options" /></label>
+      <label><span>???????</span><input name="rtdMixAmount" /></label>
+      <button class="danger-button row-delete-button" type="button" data-action="remove-rtd-mix">??</button>
+    </div>
+  `;
+}
+
+function rtdTeaDatalists() {
+  return `
+    <datalist id="rtd-tea-name-options">
+      ${teaMaterials().map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.id)}</option>`).join("")}
+    </datalist>
+    <datalist id="rtd-tea-id-options">
+      ${teaMaterials().map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}
+    </datalist>
+  `;
+}
+
+function rtdMixDatalists() {
+  return `
+    <datalist id="rtd-mix-tea-options">
+      ${teaMaterials().map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.id)}</option>`).join("")}
+    </datalist>
+    <datalist id="rtd-mix-additive-options">
+      ${additiveMaterials().map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.id)}</option>`).join("")}
+    </datalist>
+    <datalist id="rtd-mix-general-options">
+      ${generalMaterials().map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.category || item.supplier || "")}</option>`).join("")}
+    </datalist>
+  `;
+}
+
+function rtdFormulaCard(record) {
+  const teas = record.teas || [];
+  const mixItems = record.mixItems || [];
+  const extraction = record.extraction || {};
+  return baseCard("rtdFormulas", record, record.customer || "?????", [record.status, record.version, `${mixItems.length} ?????`], [
+    ["????", teas.map((tea) => `${tea.name}${tea.materialId ? `?${tea.materialId}?` : ""}`).join(" / ") || "???"],
+    ["????", [extraction.temperature, extraction.time, extraction.brewTeaWaterRatio, extraction.finalTeaWaterRatio].filter(Boolean).join(" / ") || "???"],
+    ["????", mixItems.map((item) => `${item.type}:${item.name}${item.amount ? ` ${item.amount}` : ""}`).join(" / ") || "???"],
+  ]);
+}
+
+function bindRtdFormulaForm() {
+  const formElement = document.querySelector("#rtd-formula-form");
+  formElement.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = clean(form.get("name"));
+    const teas = readRtdTeaRows();
+    const mixItems = readRtdMixRows();
+    if (!name) return showMessage("rtd-formula-message", "????????");
+    if (!teas.length) return showMessage("rtd-formula-message", "??????????");
+    if (!mixItems.length) return showMessage("rtd-formula-message", "????????????");
+
+    const currentRecord = editingRtdFormulaId ? state.rtdFormulas.find((item) => item.id === editingRtdFormulaId) : null;
+    const record = {
+      id: currentRecord?.id || `RTD-${Date.now()}`,
+      name,
+      customer: clean(form.get("customer")),
+      status: clean(form.get("status")),
+      version: clean(form.get("version")),
+      teas,
+      extraction: {
+        temperature: clean(form.get("extractTemperature")),
+        time: clean(form.get("extractTime")),
+        brewTeaWaterRatio: clean(form.get("brewTeaWaterRatio")),
+        finalTeaWaterRatio: clean(form.get("finalTeaWaterRatio")),
+      },
+      mixItems,
+      createdAt: currentRecord?.createdAt || today(),
+    };
+    if (currentRecord) {
+      state.rtdFormulas = state.rtdFormulas.map((item) => (item.id === currentRecord.id ? record : item));
+    } else {
+      state.rtdFormulas.unshift(record);
+    }
+    selected.rtdFormulas = record.id;
+    editingRtdFormulaId = "";
+    persist();
+    renderFormulas();
+  });
+
+  document.querySelector("#cancel-rtd-formula-edit").addEventListener("click", () => {
+    editingRtdFormulaId = "";
+    formElement.reset();
+    resetRtdRows();
+    setRtdEditMode(false);
+    showMessage("rtd-formula-message", "");
+  });
+
+  document.querySelector("#add-rtd-tea").addEventListener("click", () => {
+    const rows = document.querySelector("#rtd-tea-rows");
+    const nextIndex = rows.querySelectorAll(".rtd-tea-row").length + 1;
+    rows.insertAdjacentHTML("beforeend", rtdTeaRow(nextIndex));
+  });
+
+  document.querySelector("#rtd-tea-rows").addEventListener("click", (event) => {
+    const button = event.target.closest('[data-action="remove-rtd-tea"]');
+    if (!button) return;
+    const rows = document.querySelectorAll(".rtd-tea-row");
+    if (rows.length <= 1) return showMessage("rtd-formula-message", "?????????");
+    button.closest(".rtd-tea-row").remove();
+    reindexRows("#rtd-tea-rows", ".rtd-tea-row", "??");
+  });
+
+  document.querySelector("#add-rtd-mix").addEventListener("click", () => {
+    const rows = document.querySelector("#rtd-mix-rows");
+    const nextIndex = rows.querySelectorAll(".rtd-mix-row").length + 1;
+    rows.insertAdjacentHTML("beforeend", rtdMixRow(nextIndex));
+    updateRtdMixRow(rows.querySelector(".rtd-mix-row:last-child"));
+  });
+
+  document.querySelector("#rtd-mix-rows").addEventListener("click", (event) => {
+    const button = event.target.closest('[data-action="remove-rtd-mix"]');
+    if (!button) return;
+    const rows = document.querySelectorAll(".rtd-mix-row");
+    if (rows.length <= 1) return showMessage("rtd-formula-message", "???????????");
+    button.closest(".rtd-mix-row").remove();
+  });
+
+  document.querySelector("#rtd-mix-rows").addEventListener("change", (event) => {
+    const select = event.target.closest('[name="rtdMixType"]');
+    if (!select) return;
+    updateRtdMixRow(select.closest(".rtd-mix-row"));
+  });
+
+  updateRtdMixRows();
+}
+
+function readRtdTeaRows() {
+  return [...document.querySelectorAll(".rtd-tea-row")]
+    .map((row) => {
+      const inputName = clean(row.querySelector('[name="rtdTeaName"]').value);
+      const inputId = clean(row.querySelector('[name="rtdTeaId"]').value);
+      if (!inputName && !inputId) return null;
+      const matched = findMaterialInSource(teaMaterials(), inputName, inputId);
+      return {
+        materialId: matched?.id || inputId,
+        name: matched?.name || inputName,
+        matched: Boolean(matched),
+      };
+    })
+    .filter(Boolean);
+}
+
+function readRtdMixRows() {
+  return [...document.querySelectorAll(".rtd-mix-row")]
+    .map((row) => {
+      const type = clean(row.querySelector('[name="rtdMixType"]').value);
+      const inputName = clean(row.querySelector('[name="rtdMixName"]').value);
+      const amount = clean(row.querySelector('[name="rtdMixAmount"]').value);
+      if (!inputName && !amount) return null;
+      const matched = findRtdMixMaterial(type, inputName);
+      return {
+        type,
+        name: matched?.name || inputName,
+        materialId: matched?.id || "",
+        amount,
+        matched: Boolean(matched),
+      };
+    })
+    .filter(Boolean);
+}
+
+function findRtdMixMaterial(type, name) {
+  const source = type === "???" ? additiveMaterials() : type === "??" ? generalMaterials() : teaMaterials();
+  return source.find((item) => name && item.name === name) || source.find((item) => name && item.name.includes(name));
+}
+
+function findMaterialInSource(source, name, id) {
+  return (
+    source.find((item) => id && item.id === id) ||
+    source.find((item) => name && item.name === name) ||
+    source.find((item) => id && item.id.includes(id)) ||
+    source.find((item) => name && item.name.includes(name))
+  );
+}
+
+function updateRtdMixRows() {
+  document.querySelectorAll(".rtd-mix-row").forEach(updateRtdMixRow);
+}
+
+function updateRtdMixRow(row) {
+  if (!row) return;
+  const type = clean(row.querySelector('[name="rtdMixType"]').value);
+  const input = row.querySelector('[name="rtdMixName"]');
+  const listId = type === "???" ? "rtd-mix-additive-options" : type === "??" ? "rtd-mix-general-options" : "rtd-mix-tea-options";
+  input.setAttribute("list", listId);
+}
+
+function loadSelectedRtdFormulaForEdit() {
+  const record = state.rtdFormulas.find((item) => item.id === selected.rtdFormulas);
+  if (!record) return showMessage("rtd-formula-message", "?????????RTD???");
+  editingRtdFormulaId = record.id;
+  const form = document.querySelector("#rtd-formula-form");
+  const extraction = record.extraction || {};
+  form.elements.name.value = record.name || "";
+  form.elements.customer.value = record.customer || "";
+  form.elements.status.value = record.status || "";
+  form.elements.version.value = record.version || "";
+  form.elements.extractTemperature.value = extraction.temperature || "";
+  form.elements.extractTime.value = extraction.time || "";
+  form.elements.brewTeaWaterRatio.value = extraction.brewTeaWaterRatio || "";
+  form.elements.finalTeaWaterRatio.value = extraction.finalTeaWaterRatio || "";
+  setRtdTeaRows(record.teas || []);
+  setRtdMixRows(record.mixItems || []);
+  setRtdEditMode(true);
+  showMessage("rtd-formula-message", `?????${record.name}`);
+}
+
+function setRtdTeaRows(teas) {
+  const rows = document.querySelector("#rtd-tea-rows");
+  const safeTeas = teas?.length ? teas : [{}];
+  rows.innerHTML = safeTeas.map((tea, index) => rtdTeaRow(index + 1)).join("");
+  rows.querySelectorAll(".rtd-tea-row").forEach((row, index) => {
+    const tea = safeTeas[index] || {};
+    row.querySelector('[name="rtdTeaName"]').value = tea.name || "";
+    row.querySelector('[name="rtdTeaId"]').value = tea.materialId || "";
+  });
+}
+
+function setRtdMixRows(items) {
+  const rows = document.querySelector("#rtd-mix-rows");
+  const safeItems = items?.length ? items : [{}];
+  rows.innerHTML = safeItems.map((item, index) => rtdMixRow(index + 1)).join("");
+  rows.querySelectorAll(".rtd-mix-row").forEach((row, index) => {
+    const item = safeItems[index] || {};
+    row.querySelector('[name="rtdMixType"]').value = item.type || "??";
+    row.querySelector('[name="rtdMixName"]').value = item.name || "";
+    row.querySelector('[name="rtdMixAmount"]').value = item.amount || "";
+    updateRtdMixRow(row);
+  });
+}
+
+function resetRtdRows() {
+  document.querySelector("#rtd-tea-rows").innerHTML = rtdTeaRow(1);
+  document.querySelector("#rtd-mix-rows").innerHTML = `${rtdMixRow(1)}${rtdMixRow(2)}`;
+  updateRtdMixRows();
+}
+
+function setRtdEditMode(isEditing) {
+  document.querySelector("#save-rtd-formula-button").textContent = isEditing ? "????" : "??RTD????";
+  document.querySelector("#cancel-rtd-formula-edit").hidden = !isEditing;
+}
+
 function bindCardActions(collection) {
   document.querySelectorAll(`[data-action][data-collection="${collection}"]`).forEach((button) => {
     button.addEventListener("click", () => {
@@ -1301,6 +1705,7 @@ function startRecordEdit(collection, id) {
   if (collection === "materials") loadSelectedMaterialForEdit();
   if (collection === "blends") loadSelectedBlendForEdit();
   if (collection === "formulas") loadSelectedFormulaForEdit();
+  if (collection === "rtdFormulas") loadSelectedRtdFormulaForEdit();
 }
 
 function deleteRecord(collection, id) {
@@ -1325,6 +1730,14 @@ function updateReferences(collection, oldId, newId) {
         if (brew.materialId === oldId) brew.materialId = newId;
       });
     });
+    (state.rtdFormulas || []).forEach((formula) => {
+      (formula.teas || []).forEach((tea) => {
+        if (tea.materialId === oldId) tea.materialId = newId;
+      });
+      (formula.mixItems || []).forEach((item) => {
+        if (item.materialId === oldId) item.materialId = newId;
+      });
+    });
   }
   if (collection === "blends") {
     state.formulas.forEach((formula) => {
@@ -1332,6 +1745,14 @@ function updateReferences(collection, oldId, newId) {
       if (formula.brew?.materialId === oldId) formula.brew.materialId = newId;
       (formula.brews || []).forEach((brew) => {
         if (brew.materialId === oldId) brew.materialId = newId;
+      });
+    });
+    (state.rtdFormulas || []).forEach((formula) => {
+      (formula.teas || []).forEach((tea) => {
+        if (tea.materialId === oldId) tea.materialId = newId;
+      });
+      (formula.mixItems || []).forEach((item) => {
+        if (item.materialId === oldId) item.materialId = newId;
       });
     });
   }
@@ -1358,6 +1779,8 @@ function filterRecords(records) {
       record.brew?.materialId,
       ...(record.brews || []).map((brew) => `${brew.name || ""} ${brew.materialId || ""}`),
       ...(record.drinkItems || []).map((item) => `${item.name} ${item.amount || ""}`),
+      ...(record.teas || []).map((tea) => `${tea.name || ""} ${tea.materialId || ""}`),
+      ...(record.mixItems || []).map((item) => `${item.type || ""} ${item.name || ""} ${item.amount || ""}`),
     ]
       .filter(Boolean)
       .join(" ")
@@ -1483,10 +1906,18 @@ function escapeHtml(value) {
 
 function loadSettings() {
   try {
-    return { ...defaultSettings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") };
+    return normalizeSettings({ ...defaultSettings, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") });
   } catch {
-    return clone(defaultSettings);
+    return normalizeSettings(clone(defaultSettings));
   }
+}
+
+function normalizeSettings(value) {
+  const normalized = { ...clone(defaultSettings), ...(value || {}) };
+  if (!normalized.teaPrimaryCategories?.includes("??")) normalized.teaPrimaryCategories = clone(defaultSettings.teaPrimaryCategories);
+  if (!normalized.additiveCategories?.includes("???")) normalized.additiveCategories = clone(defaultSettings.additiveCategories);
+  if (!normalized.generalCategories?.includes("???")) normalized.generalCategories = clone(defaultSettings.generalCategories);
+  return normalized;
 }
 
 function loadState() {
@@ -1516,6 +1947,7 @@ function normalizeState(value) {
   normalized.materials = (normalized.materials || []).map(normalizeMaterial).map(stripMaterialStatus);
   normalized.blends = normalized.blends || [];
   normalized.formulas = normalized.formulas || [];
+  normalized.rtdFormulas = normalized.rtdFormulas || [];
   normalized.records = normalized.records || [];
   return normalized;
 }
@@ -1551,6 +1983,7 @@ function resetSelectedDefaults() {
     materials: state.materials[0]?.id || "",
     blends: state.blends[0]?.id || "",
     formulas: state.formulas[0]?.id || "",
+    rtdFormulas: state.rtdFormulas?.[0]?.id || "",
     records: "",
   };
 }
@@ -1563,7 +1996,7 @@ async function initApp() {
   ]);
   const shouldSeedSettings = API_ENABLED && isEmptyObject(remoteSettings);
   const shouldSeedState = API_ENABLED && isEmptyObject(remoteState);
-  settings = { ...defaultSettings, ...(shouldSeedSettings ? settings : remoteSettings) };
+  settings = normalizeSettings({ ...defaultSettings, ...(shouldSeedSettings ? settings : remoteSettings) });
   state = normalizeState(shouldSeedState ? state : remoteState);
   if (shouldSeedSettings) saveRemoteData("settings", settings);
   if (shouldSeedState) saveRemoteData("state", state);

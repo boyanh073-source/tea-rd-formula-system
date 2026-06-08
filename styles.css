@@ -378,7 +378,9 @@ h1 {
 
 #blend-material-rows,
 #formula-material-rows,
-#formula-brew-rows {
+#formula-brew-rows,
+#rtd-tea-rows,
+#rtd-mix-rows {
   display: grid;
   gap: 10px;
 }
@@ -415,6 +417,37 @@ h1 {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
   gap: 8px;
   min-width: 0;
+}
+
+.rtd-mix-table {
+  display: grid;
+  gap: 8px;
+}
+
+.rtd-mix-head,
+.rtd-mix-row {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.8fr) minmax(180px, 1.3fr) minmax(120px, 0.9fr) 72px;
+  gap: 8px;
+  align-items: end;
+}
+
+.rtd-mix-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 2px;
+}
+
+.rtd-mix-row {
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.extraction-grid {
+  margin-top: 10px;
 }
 
 .row-index {
@@ -699,7 +732,9 @@ h1 {
   .blend-basic-grid,
   .formula-brew-grid,
   .blend-material-top,
-  .blend-material-main {
+  .blend-material-main,
+  .rtd-mix-head,
+  .rtd-mix-row {
     grid-template-columns: 1fr;
   }
 }
