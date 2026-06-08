@@ -421,22 +421,26 @@ h1 {
 
 .rtd-mix-table {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .rtd-mix-head,
 .rtd-mix-row {
   display: grid;
-  grid-template-columns: minmax(112px, 0.8fr) minmax(180px, 1.3fr) minmax(120px, 0.9fr) 72px;
+  grid-template-columns: 96px minmax(0, 1fr) 92px 50px;
   gap: 8px;
-  align-items: end;
+  align-items: stretch;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .rtd-mix-head {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
-  padding: 0 2px;
+  padding: 0 10px;
 }
 
 .rtd-mix-row {
@@ -444,10 +448,54 @@ h1 {
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: #ffffff;
+  overflow: hidden;
 }
 
 .extraction-grid {
   margin-top: 10px;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  justify-content: start;
+}
+
+.rtd-tea-row .blend-material-top {
+  grid-template-columns: 70px 58px;
+}
+
+.rtd-tea-row .blend-material-main {
+  grid-template-columns: minmax(0, 180px) minmax(0, 180px);
+  justify-content: start;
+}
+
+.rtd-mix-row label {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
+.rtd-mix-row .row-delete-button {
+  width: 100%;
+  padding: 0;
+}
+
+.rtd-mix-row select,
+.rtd-mix-row input {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+}
+
+.rtd-mix-type {
+  max-width: 96px;
+}
+
+.rtd-mix-amount {
+  max-width: 92px;
+}
+
+.rtd-mix-action {
+  display: grid;
+  align-content: end;
+  min-width: 0;
 }
 
 .row-index {
@@ -701,6 +749,13 @@ h1 {
   }
 }
 
+@media (max-width: 980px) {
+  .rtd-mix-head,
+  .rtd-mix-row {
+    grid-template-columns: 90px minmax(0, 1fr) 86px 48px;
+  }
+}
+
 @media (max-width: 780px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -736,5 +791,10 @@ h1 {
   .rtd-mix-head,
   .rtd-mix-row {
     grid-template-columns: 1fr;
+  }
+
+  .rtd-mix-type,
+  .rtd-mix-amount {
+    max-width: none;
   }
 }
