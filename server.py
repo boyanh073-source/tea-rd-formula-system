@@ -12,7 +12,8 @@ DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "data" / "app.sqlite3"))
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8000"))
-STORE_BACKEND = "postgres" if DATABASE_URL else "sqlite"
+USE_POSTGRES = bool(DATABASE_URL)
+DB_ERROR = ""
 
 
 def postgres_dsn():
@@ -31,19 +32,25 @@ def postgres_connect():
 
 
 def init_db():
-    if DATABASE_URL:
-        with postgres_connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS app_store (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL,
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    global USE_POSTGRES, DB_ERROR
+    if USE_POSTGRES:
+        try:
+            with postgres_connect() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS app_store (
+                            key TEXT PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        )
+                        """
                     )
-                    """
-                )
-        return
+            DB_ERROR = ""
+            return
+        except Exception as error:
+            USE_POSTGRES = False
+            DB_ERROR = str(error)
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
@@ -62,7 +69,7 @@ def init_db():
 
 
 def read_value(key):
-    if DATABASE_URL:
+    if USE_POSTGRES:
         with postgres_connect() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT value FROM app_store WHERE key = %s", (key,))
@@ -77,7 +84,7 @@ def read_value(key):
 
 def write_value(key, value):
     payload = json.dumps(value, ensure_ascii=False)
-    if DATABASE_URL:
+    if USE_POSTGRES:
         with postgres_connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -118,7 +125,10 @@ class AppHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            self.send_json(200, {"ok": True, "storage": STORE_BACKEND})
+            payload = {"ok": True, "storage": "postgres" if USE_POSTGRES else "sqlite"}
+            if DB_ERROR:
+                payload["databaseError"] = DB_ERROR
+            self.send_json(200, payload)
             return
         if parsed.path in {"/api/state", "/api/settings"}:
             key = parsed.path.rsplit("/", 1)[-1]
@@ -168,7 +178,9 @@ if __name__ == "__main__":
     server_class = DualStackServer if ":" in HOST else ThreadingHTTPServer
     server = server_class((HOST, PORT), AppHandler)
     print(f"Tea R&D formula system started: http://localhost:{PORT}/")
-    print(f"Storage backend: {STORE_BACKEND}")
-    if STORE_BACKEND == "sqlite":
+    print(f"Storage backend: {'postgres' if USE_POSTGRES else 'sqlite'}")
+    if DB_ERROR:
+        print(f"Database connection error: {DB_ERROR}")
+    if not USE_POSTGRES:
         print(f"SQLite path: {DB_PATH}")
     server.serve_forever()
