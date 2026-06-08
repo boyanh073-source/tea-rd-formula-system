@@ -1,19 +1,50 @@
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-import socket
 import json
 import os
-import sqlite3
 from pathlib import Path
+import socket
+import sqlite3
 from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "data" / "app.sqlite3"))
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8000"))
+STORE_BACKEND = "postgres" if DATABASE_URL else "sqlite"
+
+
+def postgres_dsn():
+    if not DATABASE_URL:
+        return ""
+    if "sslmode=" in DATABASE_URL:
+        return DATABASE_URL
+    separator = "&" if "?" in DATABASE_URL else "?"
+    return f"{DATABASE_URL}{separator}sslmode=require"
+
+
+def postgres_connect():
+    import psycopg
+
+    return psycopg.connect(postgres_dsn(), autocommit=True)
 
 
 def init_db():
+    if DATABASE_URL:
+        with postgres_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_store (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+        return
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -31,6 +62,13 @@ def init_db():
 
 
 def read_value(key):
+    if DATABASE_URL:
+        with postgres_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT value FROM app_store WHERE key = %s", (key,))
+                row = cur.fetchone()
+        return json.loads(row[0]) if row else {}
+
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA busy_timeout=5000")
         row = conn.execute("SELECT value FROM app_store WHERE key = ?", (key,)).fetchone()
@@ -39,6 +77,21 @@ def read_value(key):
 
 def write_value(key, value):
     payload = json.dumps(value, ensure_ascii=False)
+    if DATABASE_URL:
+        with postgres_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO app_store (key, value, updated_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT(key) DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = NOW()
+                    """,
+                    (key, payload),
+                )
+        return
+
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA busy_timeout=5000")
         conn.execute(
@@ -65,7 +118,7 @@ class AppHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            self.send_json(200, {"ok": True})
+            self.send_json(200, {"ok": True, "storage": STORE_BACKEND})
             return
         if parsed.path in {"/api/state", "/api/settings"}:
             key = parsed.path.rsplit("/", 1)[-1]
@@ -114,6 +167,8 @@ if __name__ == "__main__":
     init_db()
     server_class = DualStackServer if ":" in HOST else ThreadingHTTPServer
     server = server_class((HOST, PORT), AppHandler)
-    print(f"茶饮研发配方系统已启动：http://localhost:{PORT}/")
-    print(f"数据库路径：{DB_PATH}")
+    print(f"Tea R&D formula system started: http://localhost:{PORT}/")
+    print(f"Storage backend: {STORE_BACKEND}")
+    if STORE_BACKEND == "sqlite":
+        print(f"SQLite path: {DB_PATH}")
     server.serve_forever()
