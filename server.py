@@ -1,10 +1,13 @@
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 import json
 import os
 from pathlib import Path
 import socket
 import sqlite3
+from zipfile import ZIP_DEFLATED, ZipFile
 from urllib.parse import urlparse
+from xml.sax.saxutils import escape
 
 
 ROOT = Path(__file__).resolve().parent
@@ -114,6 +117,136 @@ def write_value(key, value):
         conn.commit()
 
 
+def excel_cell(value):
+    text = "" if value is None else str(value)
+    return f'<c t="inlineStr"><is><t>{escape(text)}</t></is></c>'
+
+
+def excel_row(values):
+    return f"<row>{''.join(excel_cell(value) for value in values)}</row>"
+
+
+def excel_sheet(rows):
+    body = "".join(excel_row(row) for row in rows)
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>{body}</sheetData>
+</worksheet>"""
+
+
+def workbook_xml(sheet_names):
+    sheets = "".join(
+        f'<sheet name="{escape(name[:31])}" sheetId="{index}" r:id="rId{index}"/>'
+        for index, name in enumerate(sheet_names, 1)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>{sheets}</sheets>
+</workbook>"""
+
+
+def workbook_rels(sheet_count):
+    rels = "".join(
+        f'<Relationship Id="rId{index}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{index}.xml"/>'
+        for index in range(1, sheet_count + 1)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>"""
+
+
+def content_types(sheet_count):
+    sheets = "".join(
+        f'<Override PartName="/xl/worksheets/sheet{index}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        for index in range(1, sheet_count + 1)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  {sheets}
+</Types>"""
+
+
+def root_rels():
+    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"""
+
+
+def make_rows(state, settings):
+    materials = state.get("materials", [])
+    blends = state.get("blends", [])
+    fresh_formulas = state.get("freshFormulas") or state.get("formulas", [])
+    rtd_formulas = state.get("rtdFormulas", [])
+
+    sheets = []
+    sheets.append(("茶叶原料库", [["编号", "名称", "一级分类", "二级分类", "产地", "风格", "备注", "创建日期"]] + [
+        [item.get("id"), item.get("name"), item.get("primaryCategory"), item.get("secondaryCategory"), item.get("origin"), item.get("style"), item.get("note"), item.get("createdAt")]
+        for item in materials if item.get("group") == "tea" or item.get("materialGroup") == "tea"
+    ]))
+    sheets.append(("添加剂原料库", [["编号", "名称", "分类", "二级分类", "风格", "备注", "创建日期"]] + [
+        [item.get("id"), item.get("name"), item.get("category"), item.get("secondaryCategory"), item.get("style"), item.get("note"), item.get("createdAt")]
+        for item in materials if item.get("group") == "additive" or item.get("materialGroup") == "additive"
+    ]))
+    sheets.append(("配料库", [["名称", "供应商", "一级分类", "二级分类", "创建日期"]] + [
+        [item.get("name"), item.get("supplier"), item.get("category"), item.get("secondaryCategory"), item.get("createdAt")]
+        for item in materials if item.get("group") == "general" or item.get("materialGroup") == "general"
+    ]))
+    sheets.append(("拼配方案库", [["编号", "名称", "面向客户", "状态", "拼配方式", "创建日期"]] + [
+        [item.get("id"), item.get("name"), item.get("customer"), item.get("status"), item.get("method"), item.get("createdAt")]
+        for item in blends
+    ]))
+    sheets.append(("拼配原料明细", [["拼配编号", "拼配名称", "原料类型", "原料名称", "原料编号", "添加量"]] + [
+        [blend.get("id"), blend.get("name"), row.get("type") or row.get("materialType"), row.get("name"), row.get("materialId"), row.get("amount") or row.get("ratio")]
+        for blend in blends for row in blend.get("items", [])
+    ]))
+    sheets.append(("现制配方库", [["配方编号", "名称", "面向客户", "状态", "版本", "SOP", "创建日期"]] + [
+        [item.get("id"), item.get("name"), item.get("customer"), item.get("status"), item.get("version"), item.get("sop"), item.get("createdAt")]
+        for item in fresh_formulas
+    ]))
+    sheets.append(("现制茶叶冲泡", [["配方编号", "配方名称", "茶汤名称", "茶叶名称", "茶叶编号", "茶叶量", "水温", "时间", "热水量", "冰块量"]] + [
+        [formula.get("id"), formula.get("name"), brew.get("soupName"), brew.get("teaName") or brew.get("name"), brew.get("teaId") or brew.get("materialId"), brew.get("teaAmount"), brew.get("temperature"), brew.get("time"), brew.get("hotWater"), brew.get("ice")]
+        for formula in fresh_formulas for brew in formula.get("brews", [])
+    ]))
+    sheets.append(("现制饮品出品", [["配方编号", "配方名称", "原料类型", "原料名称", "用量"]] + [
+        [formula.get("id"), formula.get("name"), row.get("type") or row.get("materialType"), row.get("name"), row.get("amount") or row.get("ratio")]
+        for formula in fresh_formulas for row in (formula.get("outputs") or formula.get("drinkItems") or [])
+    ]))
+    sheets.append(("RTD配方库", [["配方编号", "名称", "面向客户", "状态", "版本", "萃取水温", "萃取时间", "冲泡茶水比", "定容茶水比", "创建日期"]] + [
+        [item.get("id"), item.get("name"), item.get("customer"), item.get("status"), item.get("version"), item.get("extraction", {}).get("temperature"), item.get("extraction", {}).get("time"), item.get("extraction", {}).get("brewTeaWaterRatio"), item.get("extraction", {}).get("finalTeaWaterRatio"), item.get("createdAt")]
+        for item in rtd_formulas
+    ]))
+    sheets.append(("RTD萃取茶叶", [["配方编号", "配方名称", "茶叶名", "茶叶编号"]] + [
+        [formula.get("id"), formula.get("name"), tea.get("name"), tea.get("materialId")]
+        for formula in rtd_formulas for tea in formula.get("teas", [])
+    ]))
+    sheets.append(("RTD调配方案", [["配方编号", "配方名称", "原料类型", "原料名", "原料编号", "添加量每升"]] + [
+        [formula.get("id"), formula.get("name"), row.get("type"), row.get("name"), row.get("materialId"), row.get("amount")]
+        for formula in rtd_formulas for row in formula.get("mixItems", [])
+    ]))
+    sheets.append(("设置", [["设置项", "选项"]] + [
+        [key, " / ".join(value) if isinstance(value, list) else value]
+        for key, value in (settings or {}).items()
+    ]))
+    return sheets
+
+
+def make_workbook(state, settings):
+    sheets = make_rows(state, settings)
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", content_types(len(sheets)))
+        archive.writestr("_rels/.rels", root_rels())
+        archive.writestr("xl/workbook.xml", workbook_xml([name for name, _ in sheets]))
+        archive.writestr("xl/_rels/workbook.xml.rels", workbook_rels(len(sheets)))
+        for index, (_, rows) in enumerate(sheets, 1):
+            archive.writestr(f"xl/worksheets/sheet{index}.xml", excel_sheet(rows))
+    return buffer.getvalue()
+
+
 class AppHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -129,6 +262,17 @@ class AppHandler(SimpleHTTPRequestHandler):
             if DB_ERROR:
                 payload["databaseError"] = DB_ERROR
             self.send_json(200, payload)
+            return
+        if parsed.path == "/api/export.xlsx":
+            state = read_value("state")
+            settings = read_value("settings")
+            body = make_workbook(state, settings)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self.send_header("Content-Disposition", 'attachment; filename="tea-rd-archive.xlsx"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if parsed.path in {"/api/state", "/api/settings"}:
             key = parsed.path.rsplit("/", 1)[-1]

@@ -1,4 +1,6 @@
 const STORE_KEY = "tea-rd-local-draft-v1";
+const ARCHIVE_KEY = "tea-rd-last-excel-archive";
+const ARCHIVE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const API_ENABLED = !window.FORCE_LOCAL_MODE && location.protocol !== "file:";
 
 const defaults = {
@@ -57,6 +59,7 @@ const root = document.querySelector("#view-root");
 const title = document.querySelector("#page-title");
 const kicker = document.querySelector("#page-kicker");
 const searchInput = document.querySelector("#search-input");
+const archiveButton = document.querySelector("#archive-button");
 
 const viewMeta = {
   materials: ["原料库", "茶叶原料库 / 香精添加剂库 / 配料库"],
@@ -76,6 +79,7 @@ document.querySelectorAll(".nav-item").forEach((button) => {
 });
 
 searchInput.addEventListener("input", render);
+archiveButton?.addEventListener("click", () => downloadArchive("manual"));
 
 initApp();
 
@@ -1251,6 +1255,7 @@ async function initApp() {
   }
   if (!hasRemoteSettings) saveRemoteData("settings", data.settings);
   if (!hasRemoteState) saveRemoteData("state", data.state);
+  runWeeklyArchiveCheck();
 }
 
 async function loadRemoteData(key) {
@@ -1279,4 +1284,46 @@ async function saveRemoteData(key, value) {
 
 function isEmptyObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
+function runWeeklyArchiveCheck() {
+  const lastArchive = Number(localStorage.getItem(ARCHIVE_KEY) || 0);
+  if (Date.now() - lastArchive < ARCHIVE_INTERVAL_MS) return;
+  window.setTimeout(() => {
+    const shouldArchive = window.confirm("已到每周数据存档时间，是否现在导出 Excel 存档？");
+    if (shouldArchive) downloadArchive("weekly");
+  }, 1200);
+}
+
+function archiveFileName(extension) {
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  return `茶饮研发配方系统存档-${stamp}.${extension}`;
+}
+
+function downloadArchive(mode = "manual") {
+  localStorage.setItem(ARCHIVE_KEY, String(Date.now()));
+  if (API_ENABLED) {
+    const link = document.createElement("a");
+    link.href = `/api/export.xlsx?mode=${encodeURIComponent(mode)}&t=${Date.now()}`;
+    link.download = archiveFileName("xlsx");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return;
+  }
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = archiveFileName("json");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

@@ -176,6 +176,11 @@ h1 {
   gap: 10px;
 }
 
+.archive-button {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
 .search-box {
   display: flex;
   align-items: center;
